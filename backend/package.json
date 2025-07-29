@@ -1,0 +1,30 @@
+{
+  "name": "buildsy-backend",
+  "version": "1.0.0",
+  "description": "",
+  "homepage": "https://github.com/basupatil1213/buildsy-web#readme",
+  "bugs": {
+    "url": "https://github.com/basupatil1213/buildsy-web/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/basupatil1213/buildsy-web.git"
+  },
+  "license": "Apache-2.0",
+  "author": "Basavaraj Patil",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "test": "npm test",
+    "dev": "nodemon server.js",
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.1",
+    "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10"
+  }
+}
