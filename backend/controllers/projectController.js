@@ -114,9 +114,13 @@ export const projectController = {
         
         try {
             const { id } = req.params;
+            console.log('[projectController] updateProject - Project ID:', id);
+            console.log('[projectController] updateProject - Request body:', req.body);
+            
             const { error, value } = updateProjectSchema.validate(req.body);
             
             if (error) {
+                console.log('[projectController] updateProject - Validation error:', error.details);
                 return res.status(400).json({
                     success: false,
                     message: 'Validation error',
@@ -124,10 +128,14 @@ export const projectController = {
                 });
             }
 
+            console.log('[projectController] updateProject - Validated data:', value);
             const userId = req.user?.id;
+            console.log('[projectController] updateProject - User ID:', userId);
+            
             const project = await projectService.updateProject(id, value, userId);
             
             if (!project) {
+                console.log('[projectController] updateProject - Project not found or no permission');
                 return res.status(404).json({
                     success: false,
                     message: 'Project not found or you do not have permission to update it'

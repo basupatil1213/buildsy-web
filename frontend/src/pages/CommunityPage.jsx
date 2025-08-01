@@ -47,7 +47,7 @@ const CommunityPage = () => {
         'Other'
     ];
 
-    const difficulties = ['Beginner', 'Intermediate', 'Advanced'];
+    const difficulties = ['beginner', 'intermediate', 'advanced'];
     const sortOptions = [
         { value: 'created_at', label: 'Newest First' },
         { value: 'votes', label: 'Most Popular' },
@@ -62,6 +62,8 @@ const CommunityPage = () => {
     const fetchProjects = async () => {
         try {
             setLoading(true);
+            setError(''); // Clear previous errors
+            
             const queryParams = new URLSearchParams({
                 page: currentPage.toString(),
                 limit: '12',
@@ -71,15 +73,33 @@ const CommunityPage = () => {
                 }, {})
             });
 
-            const response = await api.get(`/community/projects?${queryParams}`);
+            const response = await api.get(`/api/community/projects?${queryParams}`);
+            console.log('[CommunityPage] API Response:', response.data);
             
-            if (response.data.success) {
-                setProjects(response.data.data.projects);
-                setTotalPages(response.data.data.pagination.totalPages);
+            if (response.data?.success) {
+                const responseData = response.data.data || {};
+                console.log('[CommunityPage] Response Data:', responseData);
+                setProjects(responseData.projects || []);
+                setTotalPages(responseData.totalPages || 1);
+            } else {
+                console.error('API response error:', response.data);
+                setError(response.data?.message || 'Failed to load community projects');
             }
         } catch (err) {
             console.error('Error fetching projects:', err);
-            setError('Failed to load community projects');
+            
+            // More detailed error messages
+            if (err.response?.status === 401) {
+                setError('Authentication required. Please log in.');
+            } else if (err.response?.status === 404) {
+                setError('Community service not found. Please try again later.');
+            } else if (err.response?.status >= 500) {
+                setError('Server error. Please try again later.');
+            } else if (err.code === 'ERR_NETWORK') {
+                setError('Network error. Please check your connection.');
+            } else {
+                setError('Failed to load community projects. Please try again.');
+            }
         } finally {
             setLoading(false);
         }
@@ -93,7 +113,7 @@ const CommunityPage = () => {
         }
 
         try {
-            const response = await api.post(`/community/projects/${projectId}/vote`, {
+            const response = await api.post(`/api/community/projects/${projectId}/vote`, {
                 voteType
             });
 
@@ -140,7 +160,7 @@ const CommunityPage = () => {
                         to={`/community/projects/${project.id}`}
                         className="text-xl font-semibold text-gray-900 hover:text-blue-600 transition-colors"
                     >
-                        {project.title}
+                        {project.name}
                     </Link>
                     <p className="text-gray-600 mt-2 line-clamp-3">
                         {project.description}
@@ -155,12 +175,12 @@ const CommunityPage = () => {
                     </span>
                 )}
                 {project.difficulty && (
-                    <span className={`px-2 py-1 text-xs rounded-full ${
-                        project.difficulty === 'Beginner' ? 'bg-green-100 text-green-800' :
-                        project.difficulty === 'Intermediate' ? 'bg-yellow-100 text-yellow-800' :
+                                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
+                        project.difficulty === 'beginner' ? 'bg-green-100 text-green-800' :
+                        project.difficulty === 'intermediate' ? 'bg-yellow-100 text-yellow-800' :
                         'bg-red-100 text-red-800'
                     }`}>
-                        {project.difficulty}
+                        {project.difficulty ? project.difficulty.charAt(0).toUpperCase() + project.difficulty.slice(1) : 'Unknown'}
                     </span>
                 )}
                 {project.estimated_duration && (
@@ -303,7 +323,9 @@ const CommunityPage = () => {
                             >
                                 <option value="">All Difficulties</option>
                                 {difficulties.map(difficulty => (
-                                    <option key={difficulty} value={difficulty}>{difficulty}</option>
+                                    <option key={difficulty} value={difficulty}>
+                                        {difficulty.charAt(0).toUpperCase() + difficulty.slice(1)}
+                                    </option>
                                 ))}
                             </select>
 

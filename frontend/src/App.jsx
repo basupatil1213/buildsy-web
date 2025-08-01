@@ -8,6 +8,7 @@ import Dashboard from './pages/Dashboard';
 import GenerateIdeas from './pages/GenerateIdeas';
 import CommunityPage from './pages/CommunityPage';
 import ProjectDetailsPage from './pages/ProjectDetailsPage';
+import EditProject from './pages/EditProject';
 
 // Protected Route component
 const ProtectedRoute = ({ children }) => {
@@ -69,6 +70,16 @@ function AppContent() {
           element={
             <ProtectedRoute>
               <GenerateIdeas />
+            </ProtectedRoute>
+          } 
+        />
+        
+        {/* Project Routes */}
+        <Route 
+          path="/projects/:projectId/edit" 
+          element={
+            <ProtectedRoute>
+              <EditProject />
             </ProtectedRoute>
           } 
         />

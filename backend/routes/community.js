@@ -1,13 +1,13 @@
 import express from 'express';
 import { communityController } from '../controllers/communityController.js';
-import { authenticateToken } from '../utils/auth.js';
+import { authenticateToken, optionalAuth } from '../utils/auth.js';
 
 const router = express.Router();
 
 console.log('[Community Routes] Loading community routes...');
 
-// Get public projects for community page
-router.get('/projects', communityController.getPublicProjects);
+// Get public projects for community page (with optional user vote info)
+router.get('/projects', optionalAuth, communityController.getPublicProjects);
 console.log('[Community Routes] Added GET /projects route');
 
 // Get project details with comments

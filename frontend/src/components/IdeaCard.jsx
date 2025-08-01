@@ -15,7 +15,7 @@ const IdeaCard = ({
   const [isVoting, setIsVoting] = useState(false);
 
   const handleVote = async (voteType) => {
-    if (!user || isVoting) return;
+    if (!user || isVoting || !onVote) return;
     
     setIsVoting(true);
     try {
@@ -165,24 +165,26 @@ const IdeaCard = ({
       {/* Footer */}
       <div className="flex items-center justify-between text-sm text-gray-500">
         <div className="flex items-center space-x-4">
-          {/* Vote buttons */}
-          <div className="flex items-center space-x-2">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                handleVote(1);
-              }}
-              disabled={!user || isVoting}
-              className={`flex items-center space-x-1 px-2 py-1 rounded transition-colors ${
-                idea.user_vote === 1
-                  ? 'text-red-600 bg-red-50'
-                  : 'text-gray-400 hover:text-red-600 hover:bg-red-50'
-              } disabled:opacity-50 disabled:cursor-not-allowed`}
-            >
-              <Heart className={`w-4 h-4 ${idea.user_vote === 1 ? 'fill-current' : ''}`} />
-              <span>{idea.total_votes || 0}</span>
-            </button>
-          </div>
+          {/* Vote buttons - only show if onVote is provided */}
+          {onVote && (
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleVote(1);
+                }}
+                disabled={!user || isVoting}
+                className={`flex items-center space-x-1 px-2 py-1 rounded transition-colors ${
+                  idea.user_vote === 1
+                    ? 'text-red-600 bg-red-50'
+                    : 'text-gray-400 hover:text-red-600 hover:bg-red-50'
+                } disabled:opacity-50 disabled:cursor-not-allowed`}
+              >
+                <Heart className={`w-4 h-4 ${idea.user_vote === 1 ? 'fill-current' : ''}`} />
+                <span>{idea.total_votes || 0}</span>
+              </button>
+            </div>
+          )}
 
           {/* Comments */}
           <div className="flex items-center space-x-1">

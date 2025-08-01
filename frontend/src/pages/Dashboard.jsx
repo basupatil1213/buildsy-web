@@ -64,6 +64,8 @@ const Dashboard = () => {
 
   const handleTogglePublic = async (projectId, isPublic) => {
     try {
+      setError(''); // Clear any previous errors
+      
       const response = await projectsAPI.update(projectId, {
         is_public: isPublic
       });
@@ -76,11 +78,24 @@ const Dashboard = () => {
             : project
         ));
       } else {
-        setError('Failed to update project visibility');
+        console.error('Update response error:', response);
+        setError(response.message || 'Failed to update project visibility');
       }
     } catch (error) {
       console.error('Error updating project visibility:', error);
-      setError('Failed to update project visibility');
+      
+      // More specific error message based on response
+      if (error.response?.data?.message) {
+        setError(error.response.data.message);
+      } else if (error.response?.status === 401) {
+        setError('Authentication required. Please log in again.');
+      } else if (error.response?.status === 403) {
+        setError('You do not have permission to update this project.');
+      } else if (error.response?.status === 404) {
+        setError('Project not found.');
+      } else {
+        setError('Failed to update project visibility. Please try again.');
+      }
     }
   };
 

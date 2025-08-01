@@ -8,6 +8,7 @@ export const communityController = {
         try {
             const page = parseInt(req.query.page) || 1;
             const limit = parseInt(req.query.limit) || 12;
+            const userId = req.user?.id; // Optional user ID for vote information
             
             const filters = {
                 category: req.query.category,
@@ -17,7 +18,7 @@ export const communityController = {
                 sortOrder: req.query.sortOrder || 'desc'
             };
 
-            const result = await projectService.getPublicProjects(page, limit, filters);
+            const result = await projectService.getPublicProjects(page, limit, filters, userId);
             
             console.log('[communityController] getPublicProjects - Success');
             return res.json({

@@ -61,7 +61,7 @@ export const projectService = {
     },
 
     // Get public projects for community page
-    async getPublicProjects(page = 1, limit = 10, filters = {}) {
+    async getPublicProjects(page = 1, limit = 10, filters = {}, userId = null) {
         try {
             const offset = (page - 1) * limit;
             
@@ -95,8 +95,48 @@ export const projectService = {
                 throw new Error(`Database error: ${error.message}`);
             }
 
+            let projects = data || [];
+
+            // Add vote information for all projects
+            if (projects.length > 0) {
+                const projectIds = projects.map(p => p.id);
+                
+                // Get all votes for all projects
+                const { data: allVotes } = await supabase
+                    .from('votes')
+                    .select('project_id, vote_type')
+                    .in('project_id', projectIds);
+
+                // Get user votes if userId is provided
+                let userVotes = [];
+                if (userId) {
+                    const { data } = await supabase
+                        .from('votes')
+                        .select('project_id, vote_type')
+                        .eq('user_id', userId)
+                        .in('project_id', projectIds);
+                    userVotes = data || [];
+                }
+
+                // Add vote counts and userVote property to each project
+                projects = projects.map(project => {
+                    const projectVotes = allVotes?.filter(v => v.project_id === project.id) || [];
+                    const upvotes = projectVotes.filter(v => v.vote_type === 1).length;
+                    const downvotes = projectVotes.filter(v => v.vote_type === -1).length;
+                    
+                    const userVote = userVotes.find(v => v.project_id === project.id);
+                    
+                    return {
+                        ...project,
+                        upvotes,
+                        downvotes,
+                        userVote: userVote ? userVote.vote_type : null
+                    };
+                });
+            }
+
             return {
-                projects: data,
+                projects,
                 total: count,
                 page,
                 totalPages: Math.ceil(count / limit)
@@ -211,6 +251,9 @@ export const projectService = {
                 .eq('user_id', userId)
                 .single();
 
+            let action;
+            let currentUserVote = null;
+
             if (existingVote) {
                 if (existingVote.vote_type === voteType) {
                     // Remove vote if same type
@@ -220,7 +263,8 @@ export const projectService = {
                         .eq('id', existingVote.id);
                     
                     if (error) throw error;
-                    return { action: 'removed', voteType };
+                    action = 'removed';
+                    currentUserVote = null;
                 } else {
                     // Update vote type
                     const { error } = await supabase
@@ -229,7 +273,8 @@ export const projectService = {
                         .eq('id', existingVote.id);
                     
                     if (error) throw error;
-                    return { action: 'updated', voteType };
+                    action = 'updated';
+                    currentUserVote = voteType;
                 }
             } else {
                 // Create new vote
@@ -242,8 +287,26 @@ export const projectService = {
                     }]);
                 
                 if (error) throw error;
-                return { action: 'created', voteType };
+                action = 'created';
+                currentUserVote = voteType;
             }
+
+            // Get updated vote counts
+            const { data: voteCounts } = await supabase
+                .from('votes')
+                .select('vote_type')
+                .eq('project_id', projectId);
+
+            const upvotes = voteCounts?.filter(v => v.vote_type === 1).length || 0;
+            const downvotes = voteCounts?.filter(v => v.vote_type === -1).length || 0;
+
+            return {
+                action,
+                voteType,
+                upvotes,
+                downvotes,
+                userVote: currentUserVote
+            };
         } catch (error) {
             console.error('[projectService] voteProject error:', error);
             throw error;
@@ -261,17 +324,18 @@ export const projectService = {
                     content,
                     parent_id: parentId
                 }])
-                .select(`
-                    *,
-                    user:auth.users(email)
-                `)
+                .select('*')
                 .single();
 
             if (error) {
                 throw new Error(`Database error: ${error.message}`);
             }
 
-            return data;
+            // Add placeholder author info for consistency
+            return {
+                ...data,
+                author_email: 'user@buildsy.com' // Placeholder for now
+            };
         } catch (error) {
             console.error('[projectService] addComment error:', error);
             throw error;
@@ -285,10 +349,7 @@ export const projectService = {
             
             const { data, error, count } = await supabase
                 .from('comments')
-                .select(`
-                    *,
-                    user:auth.users(email)
-                `, { count: 'exact' })
+                .select('*', { count: 'exact' })
                 .eq('project_id', projectId)
                 .is('parent_id', null) // Only get top-level comments
                 .order('created_at', { ascending: false })
@@ -303,16 +364,14 @@ export const projectService = {
                 data.map(async (comment) => {
                     const { data: replies } = await supabase
                         .from('comments')
-                        .select(`
-                            *,
-                            user:auth.users(email)
-                        `)
+                        .select('*')
                         .eq('parent_id', comment.id)
                         .order('created_at', { ascending: true });
                     
                     return {
                         ...comment,
-                        replies: replies || []
+                        replies: replies || [],
+                        author_email: 'anonymous@buildsy.com' // Placeholder for now
                     };
                 })
             );

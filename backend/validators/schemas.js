@@ -23,11 +23,12 @@ export const createProjectSchema = Joi.object({
 export const updateProjectSchema = Joi.object({
     name: Joi.string().min(1).max(100),
     description: Joi.string().min(10).max(1000),
-    techStack: Joi.array().items(Joi.string()),
+    tech_stack: Joi.array().items(Joi.string()),
     category: Joi.string(),
     difficulty: Joi.string().valid('beginner', 'intermediate', 'advanced'),
-    estimatedDuration: Joi.string(),
+    estimated_duration: Joi.string(),
     features: Joi.array().items(Joi.string()),
     requirements: Joi.array().items(Joi.string()),
-    status: Joi.string().valid('idea', 'planning', 'in_progress', 'completed', 'on_hold')
+    status: Joi.string().valid('idea', 'planning', 'in_progress', 'completed', 'on_hold'),
+    is_public: Joi.boolean() // Add is_public field for visibility updates
 });

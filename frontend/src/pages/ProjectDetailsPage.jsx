@@ -39,7 +39,7 @@ const ProjectDetailsPage = () => {
     const fetchProjectDetails = async () => {
         try {
             setLoading(true);
-            const response = await api.get(`/community/projects/${projectId}`);
+            const response = await api.get(`/api/community/projects/${projectId}`);
             
             if (response.data.success) {
                 setProject(response.data.data.project);
@@ -60,7 +60,7 @@ const ProjectDetailsPage = () => {
         }
 
         try {
-            const response = await api.post(`/community/projects/${projectId}/vote`, {
+            const response = await api.post(`/api/community/projects/${projectId}/vote`, {
                 voteType
             });
 
@@ -89,7 +89,7 @@ const ProjectDetailsPage = () => {
 
         try {
             setSubmittingComment(true);
-            const response = await api.post(`/community/projects/${projectId}/comments`, {
+            const response = await api.post(`/api/community/projects/${projectId}/comments`, {
                 content: newComment.trim()
             });
 
@@ -114,14 +114,14 @@ const ProjectDetailsPage = () => {
         if (!replyText.trim()) return;
 
         try {
-            const response = await api.post(`/community/projects/${projectId}/comments`, {
+            const response = await api.post(`/api/community/projects/${projectId}/comments`, {
                 content: replyText.trim(),
                 parentId
             });
 
             if (response.data.success) {
                 // Refresh comments to get the updated nested structure
-                const commentsResponse = await api.get(`/community/projects/${projectId}/comments`);
+                const commentsResponse = await api.get(`/api/community/projects/${projectId}/comments`);
                 if (commentsResponse.data.success) {
                     setComments(commentsResponse.data.data.comments);
                 }
@@ -272,7 +272,7 @@ const ProjectDetailsPage = () => {
                     <div className="flex justify-between items-start mb-6">
                         <div className="flex-1">
                             <h1 className="text-3xl font-bold text-gray-900 mb-4">
-                                {project.title}
+                                {project.name}
                             </h1>
                             <p className="text-lg text-gray-700 mb-6">
                                 {project.description}
@@ -310,11 +310,11 @@ const ProjectDetailsPage = () => {
                         )}
                         {project.difficulty && (
                             <span className={`px-3 py-1 text-sm rounded-full ${
-                                project.difficulty === 'Beginner' ? 'bg-green-100 text-green-800' :
-                                project.difficulty === 'Intermediate' ? 'bg-yellow-100 text-yellow-800' :
+                                project.difficulty === 'beginner' ? 'bg-green-100 text-green-800' :
+                                project.difficulty === 'intermediate' ? 'bg-yellow-100 text-yellow-800' :
                                 'bg-red-100 text-red-800'
                             }`}>
-                                {project.difficulty}
+                                {project.difficulty.charAt(0).toUpperCase() + project.difficulty.slice(1)}
                             </span>
                         )}
                         {project.technologies && project.technologies.length > 0 && 
