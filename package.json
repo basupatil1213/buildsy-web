@@ -1,0 +1,40 @@
+{
+  "name": "buildsy-web",
+  "version": "1.0.0",
+  "description": "A full-stack application for generating and sharing project ideas",
+  "main": "index.js",
+  "scripts": {
+    "dev": "./start-dev.sh",
+    "install-all": "npm run install-backend && npm run install-frontend",
+    "install-backend": "cd backend && npm install",
+    "install-frontend": "cd frontend && npm install",
+    "start-backend": "cd backend && npm run dev",
+    "start-frontend": "cd frontend && npm run dev",
+    "build-frontend": "cd frontend && npm run build",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/basupatil1213/buildsy-web.git"
+  },
+  "keywords": [
+    "project-ideas",
+    "ai",
+    "openai",
+    "supabase",
+    "react",
+    "nodejs",
+    "community",
+    "full-stack"
+  ],
+  "author": "Basavaraj Patil",
+  "license": "Apache-2.0",
+  "bugs": {
+    "url": "https://github.com/basupatil1213/buildsy-web/issues"
+  },
+  "homepage": "https://github.com/basupatil1213/buildsy-web#readme",
+  "engines": {
+    "node": ">=18.0.0",
+    "npm": ">=8.0.0"
+  }
+}
