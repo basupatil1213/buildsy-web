@@ -11,13 +11,13 @@ export const chatMessageSchema = Joi.object({
 export const createProjectSchema = Joi.object({
     name: Joi.string().required().min(1).max(100),
     description: Joi.string().required().min(10).max(1000),
-    techStack: Joi.array().items(Joi.string()).default([]),
+    tech_stack: Joi.array().items(Joi.string()).default([]),
     category: Joi.string().required(),
     difficulty: Joi.string().valid('beginner', 'intermediate', 'advanced').required(),
-    estimatedDuration: Joi.string().required(),
+    estimated_duration: Joi.string().required(),
     features: Joi.array().items(Joi.string()).default([]),
     requirements: Joi.array().items(Joi.string()).default([]),
-    userId: Joi.string().optional()
+    user_id: Joi.string().optional()
 });
 
 export const updateProjectSchema = Joi.object({
