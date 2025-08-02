@@ -19,6 +19,8 @@ const AuthPage = () => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [awaitingVerification, setAwaitingVerification] = useState(false);
+  const [userEmail, setUserEmail] = useState('');
 
   const { signIn, signUp, user } = useAuth();
   const navigate = useNavigate();
@@ -90,7 +92,16 @@ const AuthPage = () => {
         if (error) {
           setError(error.message);
         } else {
-          setSuccess('Account created successfully! Please check your email to verify your account.');
+          setSuccess('🎉 Account created! Check your email to verify and get started.');
+          setAwaitingVerification(true);
+          setUserEmail(formData.email);
+          // Clear the form
+          setFormData({
+            email: '',
+            password: '',
+            confirmPassword: '',
+            fullName: ''
+          });
         }
       } else {
         const { data, error } = await signIn(formData.email, formData.password);
@@ -118,6 +129,28 @@ const AuthPage = () => {
     });
     setError('');
     setSuccess('');
+    setAwaitingVerification(false);
+    setUserEmail('');
+  };
+
+  const handleResendVerification = async () => {
+    try {
+      setIsLoading(true);
+      setError('');
+      // Use the signUp function with the same email to trigger resend
+      const { error } = await signUp(userEmail, 'dummy', {});
+      if (error && error.message.includes('already registered')) {
+        setSuccess('Verification email sent! Please check your inbox and spam folder.');
+      } else if (error) {
+        setError('Failed to resend verification email. Please try again.');
+      } else {
+        setSuccess('Verification email sent! Please check your inbox and spam folder.');
+      }
+    } catch (err) {
+      setError('Failed to resend verification email. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -142,10 +175,16 @@ const AuthPage = () => {
         </div>
 
         <h2 className="text-center text-3xl font-bold text-gray-900">
-          {isSignUp ? 'Create your account' : 'Sign in to your account'}
+          {awaitingVerification 
+            ? 'Check Your Email' 
+            : (isSignUp ? 'Create your account' : 'Sign in to your account')
+          }
         </h2>
         <p className="mt-2 text-center text-sm text-gray-600">
-          {isSignUp ? 'Start building amazing projects today' : 'Welcome back to Buildsy'}
+          {awaitingVerification 
+            ? 'We\'ve sent you a verification link'
+            : (isSignUp ? 'Start building amazing projects today' : 'Welcome back to Buildsy')
+          }
         </p>
       </div>
 
@@ -163,7 +202,53 @@ const AuthPage = () => {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Email Verification Prompt */}
+          {awaitingVerification && (
+            <div className="mb-6 p-6 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="flex items-center justify-center mb-4">
+                <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
+                  <Mail className="h-6 w-6 text-blue-600" />
+                </div>
+              </div>
+              <h3 className="text-lg font-semibold text-center text-gray-900 mb-2">
+                Verify Your Email Address
+              </h3>
+              <p className="text-sm text-gray-600 text-center mb-4">
+                We've sent a verification link to:
+              </p>
+              <p className="text-sm font-medium text-gray-900 text-center mb-4 bg-white px-3 py-2 rounded border">
+                {userEmail}
+              </p>
+              <p className="text-sm text-gray-600 text-center mb-6">
+                Please check your email (including spam folder) and click the verification link to activate your account.
+              </p>
+              
+              <div className="space-y-3">
+                <button
+                  onClick={handleResendVerification}
+                  disabled={isLoading}
+                  className="w-full flex justify-center py-2 px-4 border border-blue-300 rounded-md shadow-sm text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isLoading ? 'Sending...' : 'Resend Verification Email'}
+                </button>
+                
+                <button
+                  onClick={() => {
+                    setAwaitingVerification(false);
+                    setIsSignUp(false);
+                  }}
+                  className="w-full flex justify-center py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                >
+                  Back to Sign In
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Main Auth Form - Hidden when showing email verification */}
+          {!awaitingVerification && (
+            <>
+            <form onSubmit={handleSubmit} className="space-y-6">
             {isSignUp && (
               <div>
                 <label htmlFor="fullName" className="block text-sm font-medium text-gray-700">
@@ -304,6 +389,8 @@ const AuthPage = () => {
               </button>
             </div>
           </div>
+          </>
+          )}
         </div>
       </div>
     </div>
