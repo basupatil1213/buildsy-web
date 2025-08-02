@@ -47,12 +47,15 @@ const GenerateIdeas = () => {
     setMessages(prev => [...prev, userMessage]);
     
     // Check if user is responding positively to save suggestion
-    const isPositiveResponse = newMessage.toLowerCase().match(/^(yes|y|yeah|yep|sure|ok|okay|absolutely|definitely|save it|save|let's do it)$/i);
+    const isPositiveResponse = newMessage.toLowerCase().match(/^(yes|y|yeah|yep|yea|sure|ok|okay|absolutely|definitely|save it|save|let's do it|sounds good|perfect|great|i'd like that|please save|go ahead)$/i);
     const lastMessage = messages[messages.length - 1];
     const isAISaveSuggestion = lastMessage?.role === 'assistant' && 
       (lastMessage.content.toLowerCase().includes('save this project') || 
        lastMessage.content.toLowerCase().includes('would you like me to help you save') ||
-       lastMessage.content.toLowerCase().includes('would you like to save this'));
+       lastMessage.content.toLowerCase().includes('would you like to save this') ||
+       lastMessage.content.toLowerCase().includes('save this idea') ||
+       lastMessage.content.toLowerCase().includes('shall i save') ||
+       lastMessage.content.toLowerCase().includes('want me to save'));
 
     // If user says yes to save suggestion, show the preview modal with better extraction
     if (isPositiveResponse && isAISaveSuggestion) {
@@ -132,7 +135,10 @@ const GenerateIdeas = () => {
   };
 
   const extractProjectDetails = (aiResponse) => {
-    const lines = aiResponse.split('\n');
+    console.log('[GenerateIdeas] Extracting from AI response:', aiResponse);
+    
+    // Enhanced extraction with better patterns and fallbacks
+    const lines = aiResponse.split('\n').filter(line => line.trim());
     let projectName = '';
     let description = '';
     let techStack = [];
@@ -141,155 +147,316 @@ const GenerateIdeas = () => {
     let duration = '';
     let category = '';
 
-    // Extract project name - look for title patterns
-    const titlePatterns = [
-      /(?:project|idea|app|application|platform):\s*([^\n]+)/i,
-      /^#\s*([^\n]+)/m,
-      /"([^"]+)"/,
-      /build\s+(?:a|an)?\s*([A-Z][^.,!?]+)/i
+    // 1. ENHANCED PROJECT NAME EXTRACTION
+    const namePatterns = [
+      // Direct name patterns
+      /(?:Project Name|Name):\s*["\']?([^"\'\n]+)["\']?/i,
+      /^\*\*([^*]+)\*\*\s*(?:Project|App|Application|Platform|System)?/m,
+      /^#\s+([^\n]+)/m,
+      // Quoted names
+      /"([^"]+)"\s*(?:project|app|application|platform|system|tool)/i,
+      // Action-based patterns
+      /(?:let's build|create|develop|build)\s+(?:a|an)?\s*["']?([A-Z][^"'\n.,!?]{5,50})["']?/i,
+      // App/project mentions
+      /(?:app|application|project|platform|system|tool)\s+(?:called|named)\s+["']?([^"'\n.,!?]+)["']?/i,
+      // Title-like patterns at start of lines
+      /^([A-Z][A-Za-z\s]{5,50})(?:\s*[-:]\s*(?:App|Project|Platform|System|Tool))?$/m
     ];
-    
-    for (let pattern of titlePatterns) {
+
+    for (let pattern of namePatterns) {
       const match = aiResponse.match(pattern);
-      if (match && match[1] && match[1].length < 80) {
-        projectName = match[1].trim().replace(/[*#]/g, '');
-        break;
+      if (match && match[1]) {
+        let name = match[1].trim().replace(/[*#"`]/g, '');
+        // Clean up common prefixes/suffixes
+        name = name.replace(/^(?:The|A|An)\s+/i, '');
+        name = name.replace(/\s+(?:App|Project|Application|Platform|System|Tool)$/i, '');
+        if (name.length >= 3 && name.length <= 60) {
+          projectName = name;
+          break;
+        }
       }
     }
 
-    // Extract clean project description - avoid chat responses
+    // 2. ENHANCED DESCRIPTION EXTRACTION
     const descriptionPatterns = [
-      /(?:description|about|overview|summary):\s*([^\n]+(?:\n(?!(?:tech|feature|time|duration|difficult):)[^\n]+)*)/i,
-      /^([A-Z][^.!?]*(?:app|application|platform|system|tool|website|service)[^.!?]*[.!?])/m
+      // Direct description patterns
+      /(?:Description|About|Overview|Summary):\s*([^\n]+(?:\n(?!(?:Tech|Feature|Duration|Difficulty|Category):)[^\n]+)*)/i,
+      // Paragraph descriptions
+      /^([A-Z][^.!?]*(?:application|app|project|platform|system|tool|website|service)[^.!?]*[.!?])/m,
+      // Multi-line descriptions
+      /This\s+(?:project|app|application)\s+([^.!?]+[.!?])/i,
+      // It will/would patterns
+      /It\s+(?:will|would|can)\s+([^.!?]+[.!?])/i
     ];
 
     for (let pattern of descriptionPatterns) {
       const match = aiResponse.match(pattern);
       if (match && match[1]) {
-        description = match[1]
-          .replace(/\n+/g, ' ')
+        let desc = match[1]
+          .replace(/\s+/g, ' ')
           .replace(/[*#-]/g, '')
-          .replace(/^(Here's|I suggest|Let me|How about|Consider)/i, '')
+          .replace(/^(?:Here's|I suggest|Let me|How about|Consider|This is)\s+/i, '')
           .trim();
-        if (description.length > 20 && description.length < 400) break;
+        
+        if (desc.length >= 20 && desc.length <= 500) {
+          description = desc;
+          break;
+        }
       }
     }
 
-    // If no structured description, create a clean one
+    // Fallback: Extract meaningful sentences
     if (!description) {
-      // Look for the main project concept, avoiding conversational text
-      const cleanLines = lines
-        .map(line => line.trim())
-        .filter(line => 
-          line.length > 30 && 
-          !line.toLowerCase().includes('happy coding') &&
-          !line.toLowerCase().includes('feel free') &&
-          !line.toLowerCase().includes('let me know') &&
-          !line.toLowerCase().includes('if you') &&
-          !line.startsWith('Here') &&
-          !line.startsWith('I suggest')
-        );
-
-      if (cleanLines.length > 0) {
-        description = cleanLines[0].replace(/[*#-]/g, '').trim();
+      const sentences = aiResponse.split(/[.!?]+/).filter(s => s.trim());
+      for (let sentence of sentences) {
+        sentence = sentence.trim();
+        if (sentence.length >= 30 && sentence.length <= 300 &&
+            (sentence.toLowerCase().includes('app') || 
+             sentence.toLowerCase().includes('project') ||
+             sentence.toLowerCase().includes('platform') ||
+             sentence.toLowerCase().includes('system') ||
+             sentence.toLowerCase().includes('tool') ||
+             sentence.toLowerCase().includes('website'))) {
+          // Clean conversational starters
+          sentence = sentence.replace(/^(?:Well,|So,|Now,|Here,|This)\s*/i, '');
+          description = sentence + '.';
+          break;
+        }
       }
     }
 
-    // Extract tech stack
+    // 3. ENHANCED TECH STACK EXTRACTION
     const techPatterns = [
-      /(?:technologies?|tech stack|using|built with|tools?):\s*([^\n]+)/i,
-      /(?:frontend|backend|database):\s*([^\n]+)/i
+      // Direct tech stack patterns
+      /(?:Technologies?|Tech Stack|Technology Stack|Built with|Using|Tools?):\s*([^\n]+(?:\n(?!(?:Feature|Duration|Difficulty):)[^\n]*)*)/i,
+      // Frontend/Backend patterns
+      /(?:Frontend|Client):\s*([^\n]+)/i,
+      /(?:Backend|Server):\s*([^\n]+)/i,
+      /(?:Database):\s*([^\n]+)/i,
+      // In-line mentions
+      /(?:using|with|built in|powered by)\s+([A-Z][a-zA-Z0-9\s,.+&-]+?)(?:\s+(?:for|to|and|,))/gi
     ];
 
+    const allTechMentions = new Set();
+    
     for (let pattern of techPatterns) {
-      const match = aiResponse.match(pattern);
-      if (match) {
-        const techs = match[1]
-          .split(/[,&+\n]/)
-          .map(tech => tech.trim().replace(/[*-]/g, ''))
-          .filter(tech => tech && tech.length > 1 && tech.length < 30)
-          .slice(0, 8);
-        techStack = [...techStack, ...techs];
+      let match;
+      if (pattern.global) {
+        while ((match = pattern.exec(aiResponse)) !== null) {
+          if (match[1]) {
+            const techs = match[1]
+              .split(/[,&+\n]/)
+              .map(tech => tech.trim().replace(/[*-]/g, ''))
+              .filter(tech => tech && tech.length > 1 && tech.length < 25);
+            techs.forEach(tech => allTechMentions.add(tech));
+          }
+        }
+        pattern.lastIndex = 0; // Reset regex
+      } else {
+        match = aiResponse.match(pattern);
+        if (match && match[1]) {
+          const techs = match[1]
+            .split(/[,&+\n]/)
+            .map(tech => tech.trim().replace(/[*-]/g, ''))
+            .filter(tech => tech && tech.length > 1 && tech.length < 25);
+          techs.forEach(tech => allTechMentions.add(tech));
+        }
       }
     }
 
-    // Remove duplicates and clean
-    techStack = [...new Set(techStack)];
-
-    // Extract features from structured lists
-    const featurePatterns = [
-      /(?:features?|functionality|capabilities?):\s*((?:[-•*]\s*[^\n]+\n?)+)/i,
-      /(?:includes?|will have):\s*((?:[-•*]\s*[^\n]+\n?)+)/i
+    // Common technologies detection
+    const commonTechs = [
+      'React', 'Vue', 'Angular', 'Svelte', 'Next.js', 'Nuxt.js',
+      'Node.js', 'Express', 'FastAPI', 'Django', 'Flask', 'Spring',
+      'JavaScript', 'TypeScript', 'Python', 'Java', 'C++', 'C#', 'Go', 'Rust',
+      'MongoDB', 'PostgreSQL', 'MySQL', 'SQLite', 'Redis',
+      'HTML', 'CSS', 'Tailwind', 'Bootstrap', 'SASS', 'SCSS',
+      'Docker', 'Kubernetes', 'AWS', 'Azure', 'GCP', 'Firebase',
+      'Git', 'GitHub', 'Webpack', 'Vite', 'Babel'
     ];
+
+    const content = aiResponse.toLowerCase();
+    commonTechs.forEach(tech => {
+      if (content.includes(tech.toLowerCase())) {
+        allTechMentions.add(tech);
+      }
+    });
+
+    techStack = Array.from(allTechMentions).slice(0, 10);
+
+    // 4. ENHANCED FEATURES EXTRACTION
+    const featurePatterns = [
+      // Direct feature lists
+      /(?:Features?|Functionality|Capabilities?|What it does|Key Features):\s*((?:[-•*]\s*[^\n]+\n?)+)/i,
+      /(?:Includes?|Will have|Can do):\s*((?:[-•*]\s*[^\n]+\n?)+)/i,
+      // Numbered lists
+      /(?:Features?|Functionality):\s*((?:\d+\.\s*[^\n]+\n?)+)/i
+    ];
+
+    const allFeatures = new Set();
 
     for (let pattern of featurePatterns) {
       const match = aiResponse.match(pattern);
-      if (match) {
+      if (match && match[1]) {
         const newFeatures = match[1]
           .split('\n')
-          .map(line => line.replace(/^[-•*]\s*/, '').trim())
-          .filter(feature => feature && feature.length > 5 && feature.length < 100)
-          .slice(0, 8);
-        features = [...features, ...newFeatures];
+          .map(line => line.replace(/^[-•*\d+.]\s*/, '').trim())
+          .filter(feature => feature && feature.length >= 10 && feature.length <= 150);
+        newFeatures.forEach(feature => allFeatures.add(feature));
       }
     }
 
-    // Extract difficulty
-    const content = aiResponse.toLowerCase();
-    if (content.includes('beginner') || content.includes('simple') || content.includes('easy')) {
+    // Extract features from natural text
+    const featureKeywords = [
+      /(?:users? can|allows? users? to|enables? users? to)\s+([^.!?]+)/gi,
+      /(?:it will|it can|you can)\s+([^.!?]+)/gi,
+      /(?:supports?|includes?|provides?|offers?)\s+([^.!?]+)/gi
+    ];
+
+    featureKeywords.forEach(pattern => {
+      let match;
+      while ((match = pattern.exec(aiResponse)) !== null) {
+        if (match[1] && match[1].length >= 10 && match[1].length <= 100) {
+          allFeatures.add(match[1].trim());
+        }
+      }
+      pattern.lastIndex = 0; // Reset regex
+    });
+
+    features = Array.from(allFeatures).slice(0, 8);
+
+    // 5. ENHANCED DIFFICULTY EXTRACTION
+    const difficultyPatterns = [
+      /(?:Difficulty|Level|Complexity):\s*(beginner|intermediate|advanced)/i,
+      /(beginner|intermediate|advanced)\s+(?:level|project|difficulty)/i
+    ];
+
+    for (let pattern of difficultyPatterns) {
+      const match = aiResponse.match(pattern);
+      if (match && match[1]) {
+        difficulty = match[1].toLowerCase();
+        break;
+      }
+    }
+
+    // Difficulty inference
+    if (content.includes('simple') || content.includes('basic') || content.includes('easy') || 
+        content.includes('starter') || content.includes('beginner')) {
       difficulty = 'beginner';
-    } else if (content.includes('advanced') || content.includes('complex') || content.includes('expert')) {
+    } else if (content.includes('complex') || content.includes('advanced') || content.includes('expert') ||
+               content.includes('challenging') || content.includes('sophisticated')) {
       difficulty = 'advanced';
     }
 
-    // Extract duration
+    // 6. ENHANCED DURATION EXTRACTION
     const durationPatterns = [
-      /(?:duration|timeline|time|takes?):\s*([^\n]+)/i,
-      /(?:complete in|build in|takes about)\s*([^\n.,]+)/i
+      /(?:Duration|Timeline|Time|Takes?|Complete in|Build in):\s*([^\n.,!?]+)/i,
+      /(?:takes about|approximately|around)\s+([^\n.,!?]+)/i,
+      /(?:in|within)\s+(\d+[-\s]?\w+)/i
     ];
 
     for (let pattern of durationPatterns) {
       const match = aiResponse.match(pattern);
-      if (match) {
+      if (match && match[1]) {
         duration = match[1].trim().replace(/[.*]/g, '');
         break;
       }
     }
 
-    // Extract category based on keywords
-    if (content.includes('web') || content.includes('website') || content.includes('react') || content.includes('vue')) {
-      category = 'Web Development';
-    } else if (content.includes('mobile') || content.includes('ios') || content.includes('android') || content.includes('react native')) {
-      category = 'Mobile Development';
-    } else if (content.includes('game') || content.includes('unity') || content.includes('gaming')) {
-      category = 'Game Development';
-    } else if (content.includes('ai') || content.includes('machine learning') || content.includes('ml')) {
-      category = 'AI/ML';
-    } else if (content.includes('data') || content.includes('analytics') || content.includes('dashboard')) {
-      category = 'Data Science';
-    } else {
-      category = 'Software Development';
+    // 7. ENHANCED CATEGORY EXTRACTION
+    const categoryPatterns = [
+      /(?:Category|Type|Domain):\s*([^\n]+)/i
+    ];
+
+    for (let pattern of categoryPatterns) {
+      const match = aiResponse.match(pattern);
+      if (match && match[1]) {
+        category = match[1].trim();
+        break;
+      }
     }
 
-    // Fallbacks and validation
+    // Category inference based on keywords and tech stack
+    const categoryKeywords = {
+      'Web Development': ['web', 'website', 'react', 'vue', 'angular', 'html', 'css', 'javascript', 'frontend', 'backend'],
+      'Mobile Development': ['mobile', 'ios', 'android', 'react native', 'flutter', 'swift', 'kotlin'],
+      'Game Development': ['game', 'unity', 'unreal', 'gaming', 'player', 'level'],
+      'AI/ML': ['ai', 'artificial intelligence', 'machine learning', 'ml', 'neural', 'model', 'prediction'],
+      'Data Science': ['data', 'analytics', 'dashboard', 'visualization', 'chart', 'analysis'],
+      'Blockchain': ['blockchain', 'crypto', 'smart contract', 'ethereum', 'bitcoin'],
+      'IoT': ['iot', 'internet of things', 'sensor', 'arduino', 'raspberry pi'],
+      'DevOps': ['devops', 'docker', 'kubernetes', 'ci/cd', 'deployment']
+    };
+
+    if (!category) {
+      for (let [cat, keywords] of Object.entries(categoryKeywords)) {
+        if (keywords.some(keyword => content.includes(keyword))) {
+          category = cat;
+          break;
+        }
+      }
+    }
+
+    // 8. INTELLIGENT FALLBACKS
     if (!projectName) {
-      projectName = 'Untitled Project';
+      // Try to infer from description or create generic name
+      if (category && description) {
+        projectName = `${category} Project`.replace('Development ', '');
+      } else {
+        projectName = 'Creative Project Idea';
+      }
     }
 
     if (!description) {
-      description = `A ${difficulty} level ${category.toLowerCase()} project.`;
+      if (category && features.length > 0) {
+        description = `A ${difficulty} ${category.toLowerCase()} project featuring ${features.slice(0, 2).join(' and ')}.`;
+      } else {
+        description = `An innovative ${difficulty} level project generated from our conversation.`;
+      }
     }
 
-    // Clean and validate final data
-    return {
+    if (!category) {
+      category = 'Other';
+    }
+
+    if (!duration) {
+      duration = difficulty === 'beginner' ? '1-2 weeks' : 
+                 difficulty === 'advanced' ? '1-3 months' : '2-4 weeks';
+    }
+
+    // Ensure we have some features
+    if (features.length === 0) {
+      features = [
+        'User-friendly interface',
+        'Responsive design',
+        'Core functionality',
+        'Modern architecture'
+      ];
+    }
+
+    // Ensure we have some tech stack
+    if (techStack.length === 0) {
+      if (category === 'Web Development') {
+        techStack = ['HTML', 'CSS', 'JavaScript'];
+      } else if (category === 'Mobile Development') {
+        techStack = ['React Native', 'JavaScript'];
+      } else {
+        techStack = ['To be determined'];
+      }
+    }
+
+    const result = {
       name: projectName.substring(0, 100),
       description: description.substring(0, 1000),
       tech_stack: techStack.slice(0, 10),
       features: features.slice(0, 10),
-      difficulty,
-      estimated_duration: duration || 'To be determined',
-      category
+      difficulty: difficulty,
+      estimated_duration: duration,
+      category: category
     };
+
+    console.log('[GenerateIdeas] Extracted project details:', result);
+    return result;
   };
 
   const saveProjectIdea = async (projectData) => {
