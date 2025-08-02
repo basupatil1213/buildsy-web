@@ -76,6 +76,14 @@ function AppContent() {
         
         {/* Project Routes */}
         <Route 
+          path="/projects/:projectId" 
+          element={
+            <ProtectedRoute>
+              <ProjectDetailsPage />
+            </ProtectedRoute>
+          } 
+        />
+        <Route 
           path="/projects/:projectId/edit" 
           element={
             <ProtectedRoute>

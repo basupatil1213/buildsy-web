@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams, Link, useNavigate } from 'react-router-dom';
+import { useParams, Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
 import { 
@@ -15,13 +15,19 @@ import {
     Reply,
     MoreVertical,
     Flag,
-    Share2
+    Share2,
+    Edit
 } from 'lucide-react';
 
 const ProjectDetailsPage = () => {
     const { projectId } = useParams();
     const { user } = useAuth();
     const navigate = useNavigate();
+    const location = useLocation();
+    
+    // Determine if this is a personal project or community project based on the route
+    const isPersonalProject = location.pathname.startsWith('/projects/');
+    const isCommunityProject = location.pathname.startsWith('/community/projects/');
     
     const [project, setProject] = useState(null);
     const [comments, setComments] = useState([]);
@@ -39,11 +45,23 @@ const ProjectDetailsPage = () => {
     const fetchProjectDetails = async () => {
         try {
             setLoading(true);
-            const response = await api.get(`/api/community/projects/${projectId}`);
+            let response;
             
-            if (response.data.success) {
-                setProject(response.data.data.project);
-                setComments(response.data.data.comments || []);
+            if (isPersonalProject) {
+                // For personal projects, use the regular projects API
+                response = await api.get(`/api/projects/${projectId}`);
+                if (response.data.success) {
+                    setProject(response.data.data);
+                    // Personal projects might not have comments or use a different comment structure
+                    setComments([]);
+                }
+            } else if (isCommunityProject) {
+                // For community projects, use the community API
+                response = await api.get(`/api/community/projects/${projectId}`);
+                if (response.data.success) {
+                    setProject(response.data.data.project);
+                    setComments(response.data.data.comments || []);
+                }
             }
         } catch (err) {
             console.error('Error fetching project details:', err);
@@ -54,6 +72,11 @@ const ProjectDetailsPage = () => {
     };
 
     const handleVote = async (voteType) => {
+        // Only allow voting on community projects
+        if (!isCommunityProject) {
+            return;
+        }
+        
         if (!user) {
             alert('Please login to vote on projects');
             return;
@@ -80,6 +103,12 @@ const ProjectDetailsPage = () => {
 
     const handleSubmitComment = async (e) => {
         e.preventDefault();
+        
+        // Only allow commenting on community projects
+        if (!isCommunityProject) {
+            return;
+        }
+        
         if (!user) {
             alert('Please login to comment');
             return;
@@ -345,65 +374,81 @@ const ProjectDetailsPage = () => {
                         </div>
                     )}
 
-                    {/* Voting */}
-                    <div className="flex items-center gap-4 pt-6 border-t border-gray-200">
-                        <button
-                            onClick={() => handleVote(1)}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
-                                project.userVote === 1
-                                    ? 'bg-green-100 text-green-700'
-                                    : 'hover:bg-gray-100 text-gray-600'
-                            }`}
-                            disabled={!user}
-                        >
-                            <ThumbsUp className="w-5 h-5" />
-                            <span className="font-medium">{project.upvotes || 0}</span>
-                        </button>
-                        
-                        <button
-                            onClick={() => handleVote(-1)}
-                            className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
-                                project.userVote === -1
-                                    ? 'bg-red-100 text-red-700'
-                                    : 'hover:bg-gray-100 text-gray-600'
-                            }`}
-                            disabled={!user}
-                        >
-                            <ThumbsDown className="w-5 h-5" />
-                            <span className="font-medium">{project.downvotes || 0}</span>
-                        </button>
+                    {/* Voting - Only for Community Projects */}
+                    {isCommunityProject && (
+                        <div className="flex items-center gap-4 pt-6 border-t border-gray-200">
+                            <button
+                                onClick={() => handleVote(1)}
+                                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+                                    project.userVote === 1
+                                        ? 'bg-green-100 text-green-700'
+                                        : 'hover:bg-gray-100 text-gray-600'
+                                }`}
+                                disabled={!user}
+                            >
+                                <ThumbsUp className="w-5 h-5" />
+                                <span className="font-medium">{project.upvotes || 0}</span>
+                            </button>
+                            
+                            <button
+                                onClick={() => handleVote(-1)}
+                                className={`flex items-center gap-2 px-4 py-2 rounded-lg transition-colors ${
+                                    project.userVote === -1
+                                        ? 'bg-red-100 text-red-700'
+                                        : 'hover:bg-gray-100 text-gray-600'
+                                }`}
+                                disabled={!user}
+                            >
+                                <ThumbsDown className="w-5 h-5" />
+                                <span className="font-medium">{project.downvotes || 0}</span>
+                            </button>
 
-                        <div className="flex items-center gap-2 text-gray-600">
-                            <MessageCircle className="w-5 h-5" />
-                            <span className="font-medium">{comments.length} Comments</span>
+                            <div className="flex items-center gap-2 text-gray-600">
+                                <MessageCircle className="w-5 h-5" />
+                                <span className="font-medium">{comments.length} Comments</span>
+                            </div>
                         </div>
-                    </div>
+                    )}
+                    
+                    {/* Personal Project Actions */}
+                    {isPersonalProject && (
+                        <div className="flex items-center gap-4 pt-6 border-t border-gray-200">
+                            <Link
+                                to={`/projects/${projectId}/edit`}
+                                className="flex items-center gap-2 px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors"
+                            >
+                                <Edit className="w-5 h-5" />
+                                Edit Project
+                            </Link>
+                        </div>
+                    )}
                 </div>
 
-                {/* Comments Section */}
-                <div className="bg-white rounded-lg shadow-sm p-8">
-                    <h2 className="text-2xl font-semibold text-gray-900 mb-6">Comments</h2>
+                {/* Comments Section - Only for Community Projects */}
+                {isCommunityProject && (
+                    <div className="bg-white rounded-lg shadow-sm p-8">
+                        <h2 className="text-2xl font-semibold text-gray-900 mb-6">Comments</h2>
 
-                    {/* Add Comment Form */}
-                    {user ? (
-                        <form onSubmit={handleSubmitComment} className="mb-8">
-                            <textarea
-                                value={newComment}
-                                onChange={(e) => setNewComment(e.target.value)}
-                                placeholder="Share your thoughts about this project..."
-                                rows={4}
-                                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
-                            />
-                            <div className="flex justify-end mt-3">
-                                <button
-                                    type="submit"
-                                    disabled={!newComment.trim() || submittingComment}
-                                    className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                                >
-                                    <Send className="w-4 h-4" />
-                                    {submittingComment ? 'Posting...' : 'Post Comment'}
-                                </button>
-                            </div>
+                        {/* Add Comment Form */}
+                        {user ? (
+                            <form onSubmit={handleSubmitComment} className="mb-8">
+                                <textarea
+                                    value={newComment}
+                                    onChange={(e) => setNewComment(e.target.value)}
+                                    placeholder="Share your thoughts about this project..."
+                                    rows={4}
+                                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent resize-none"
+                                />
+                                <div className="flex justify-end mt-3">
+                                    <button
+                                        type="submit"
+                                        disabled={!newComment.trim() || submittingComment}
+                                        className="flex items-center gap-2 px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                                    >
+                                        <Send className="w-4 h-4" />
+                                        {submittingComment ? 'Posting...' : 'Post Comment'}
+                                    </button>
+                                </div>
                         </form>
                     ) : (
                         <div className="mb-8 p-4 bg-gray-50 rounded-lg text-center">
@@ -430,7 +475,8 @@ const ProjectDetailsPage = () => {
                             <p className="text-gray-600">No comments yet. Be the first to share your thoughts!</p>
                         </div>
                     )}
-                </div>
+                    </div>
+                )}
             </div>
         </div>
     );
