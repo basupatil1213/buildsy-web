@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { api } from '../services/api';
 import { 
@@ -11,16 +11,19 @@ import {
     Clock,
     TrendingUp,
     Users,
+    User,
     Calendar,
     ExternalLink,
     ChevronDown,
-    Star
+    Star,
+    Share2
 } from 'lucide-react';
 
 const CommunityPage = () => {
     const { user } = useAuth();
     const [projects, setProjects] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [loadingMore, setLoadingMore] = useState(false);
     const [error, setError] = useState(null);
     const [filters, setFilters] = useState({
         search: '',
@@ -30,7 +33,7 @@ const CommunityPage = () => {
         sortOrder: 'desc'
     });
     const [currentPage, setCurrentPage] = useState(1);
-    const [totalPages, setTotalPages] = useState(1);
+    const [hasMorePages, setHasMorePages] = useState(true);
     const [showFilters, setShowFilters] = useState(false);
 
     const categories = [
@@ -55,17 +58,74 @@ const CommunityPage = () => {
         { value: 'title', label: 'Alphabetical' }
     ];
 
-    useEffect(() => {
-        fetchProjects();
-    }, [currentPage, filters]);
+    // Helper function to get relative time (Reddit-style)
+    const getRelativeTime = (dateString) => {
+        const now = new Date();
+        const date = new Date(dateString);
+        const diffInSeconds = Math.floor((now - date) / 1000);
+        
+        if (diffInSeconds < 60) {
+            return 'just now';
+        } else if (diffInSeconds < 3600) {
+            const minutes = Math.floor(diffInSeconds / 60);
+            return `${minutes}m ago`;
+        } else if (diffInSeconds < 86400) {
+            const hours = Math.floor(diffInSeconds / 3600);
+            return `${hours}h ago`;
+        } else if (diffInSeconds < 2592000) {
+            const days = Math.floor(diffInSeconds / 86400);
+            return `${days}d ago`;
+        } else if (diffInSeconds < 31536000) {
+            const months = Math.floor(diffInSeconds / 2592000);
+            return `${months}mo ago`;
+        } else {
+            const years = Math.floor(diffInSeconds / 31536000);
+            return `${years}y ago`;
+        }
+    };
 
-    const fetchProjects = async () => {
+    useEffect(() => {
+        setCurrentPage(1);
+        fetchProjects(1, false);
+    }, [filters]);
+
+    // Infinite scroll effect
+    useEffect(() => {
+        const handleScroll = () => {
+            if (loadingMore || !hasMorePages) return;
+
+            const scrollTop = window.pageYOffset || document.documentElement.scrollTop;
+            const windowHeight = window.innerHeight;
+            const documentHeight = document.documentElement.offsetHeight;
+            
+            // Trigger when user is 200px from bottom
+            if (scrollTop + windowHeight >= documentHeight - 200) {
+                const nextPage = currentPage + 1;
+                setCurrentPage(nextPage);
+                fetchProjects(nextPage, true);
+            }
+        };
+
+        window.addEventListener('scroll', handleScroll);
+        return () => window.removeEventListener('scroll', handleScroll);
+    }, [currentPage, loadingMore, hasMorePages]);
+
+    // Initial load
+    useEffect(() => {
+        fetchProjects(1, false);
+    }, []);
+
+    const fetchProjects = async (page = 1, appendToExisting = false) => {
         try {
-            setLoading(true);
+            if (page === 1) {
+                setLoading(true);
+            } else {
+                setLoadingMore(true);
+            }
             setError(''); // Clear previous errors
             
             const queryParams = new URLSearchParams({
-                page: currentPage.toString(),
+                page: page.toString(),
                 limit: '12',
                 ...Object.entries(filters).reduce((acc, [key, value]) => {
                     if (value) acc[key] = value;
@@ -79,8 +139,17 @@ const CommunityPage = () => {
             if (response.data?.success) {
                 const responseData = response.data.data || {};
                 console.log('[CommunityPage] Response Data:', responseData);
-                setProjects(responseData.projects || []);
-                setTotalPages(responseData.totalPages || 1);
+                const newProjects = responseData.projects || [];
+                
+                if (appendToExisting && page > 1) {
+                    setProjects(prev => [...prev, ...newProjects]);
+                } else {
+                    setProjects(newProjects);
+                }
+                
+                // Check if there are more pages
+                const totalPages = responseData.totalPages || 1;
+                setHasMorePages(page < totalPages);
             } else {
                 console.error('API response error:', response.data);
                 setError(response.data?.message || 'Failed to load community projects');
@@ -102,6 +171,7 @@ const CommunityPage = () => {
             }
         } finally {
             setLoading(false);
+            setLoadingMore(false);
         }
     };
 
@@ -139,6 +209,7 @@ const CommunityPage = () => {
     const handleFilterChange = (key, value) => {
         setFilters(prev => ({ ...prev, [key]: value }));
         setCurrentPage(1);
+        setHasMorePages(true);
     };
 
     const clearFilters = () => {
@@ -150,107 +221,107 @@ const CommunityPage = () => {
             sortOrder: 'desc'
         });
         setCurrentPage(1);
+        setHasMorePages(true);
     };
 
-    const ProjectCard = ({ project }) => (
-        <div className="bg-white rounded-lg shadow-md hover:shadow-lg transition-shadow p-6 border border-gray-200">
-            <div className="flex justify-between items-start mb-4">
-                <div className="flex-1">
-                    <Link 
-                        to={`/community/projects/${project.id}`}
-                        className="text-xl font-semibold text-gray-900 hover:text-blue-600 transition-colors"
-                    >
-                        {project.name}
-                    </Link>
-                    <p className="text-gray-600 mt-2 line-clamp-3">
-                        {project.description}
-                    </p>
+    const ProjectCard = ({ project }) => {
+        const navigate = useNavigate();
+
+        const handleProjectClick = () => {
+            navigate(`/community/projects/${project.id}`);
+        };
+
+        return (
+            <div className="bg-white rounded-lg shadow-md p-6 hover:shadow-lg transition-shadow border border-gray-200 mb-6">
+                <div className="flex justify-between items-start mb-4">
+                    <div className="flex-1">
+                        <h3 
+                            className="text-xl font-semibold text-gray-900 mb-2 cursor-pointer hover:text-blue-600"
+                            onClick={handleProjectClick}
+                        >
+                            {project.name}
+                        </h3>
+                        <p className="text-gray-600 mb-3">{project.description}</p>
+                        
+                        <div className="flex flex-wrap gap-2 mb-3">
+                            {project.tech_stack && project.tech_stack.map((tech, index) => (
+                                <span
+                                    key={index}
+                                    className="px-2 py-1 bg-blue-100 text-blue-800 rounded-full text-sm"
+                                >
+                                    {tech}
+                                </span>
+                            ))}
+                        </div>
+
+                        <div className="flex items-center gap-4 text-sm text-gray-500">
+                            <span className="flex items-center gap-1">
+                                <User size={16} />
+                                {project.profiles?.username || 'Anonymous'}
+                            </span>
+                            <span>{getRelativeTime(project.created_at)}</span>
+                            {project.category && (
+                                <span className="px-2 py-1 bg-gray-100 text-gray-700 rounded text-sm">
+                                    {project.category}
+                                </span>
+                            )}
+                            {project.difficulty && (
+                                <span className={`px-2 py-1 rounded text-sm ${
+                                    project.difficulty === 'beginner' ? 'bg-green-100 text-green-800' :
+                                    project.difficulty === 'intermediate' ? 'bg-yellow-100 text-yellow-800' :
+                                    'bg-red-100 text-red-800'
+                                }`}>
+                                    {project.difficulty.charAt(0).toUpperCase() + project.difficulty.slice(1)}
+                                </span>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Voting Section */}
+                    <div className="flex flex-col items-center ml-4">
+                        <button
+                            onClick={() => handleVote(project.id, 1)}
+                            className={`p-2 rounded-full transition-all ${
+                                project.userVote === 1
+                                    ? 'bg-green-100 text-green-600 hover:bg-green-200'
+                                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                            }`}
+                            disabled={!user}
+                        >
+                            <ThumbsUp size={20} />
+                        </button>
+                        <span className="text-lg font-semibold text-gray-700 my-2">
+                            {(project.upvotes || 0) - (project.downvotes || 0)}
+                        </span>
+                        <button
+                            onClick={() => handleVote(project.id, -1)}
+                            className={`p-2 rounded-full transition-all ${
+                                project.userVote === -1
+                                    ? 'bg-red-100 text-red-600 hover:bg-red-200'
+                                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                            }`}
+                            disabled={!user}
+                        >
+                            <ThumbsDown size={20} />
+                        </button>
+                    </div>
                 </div>
-            </div>
 
-            <div className="flex flex-wrap gap-2 mb-4">
-                {project.category && (
-                    <span className="px-2 py-1 bg-blue-100 text-blue-800 text-xs rounded-full">
-                        {project.category}
-                    </span>
-                )}
-                {project.difficulty && (
-                                        <span className={`px-2 py-1 rounded-full text-xs font-medium ${
-                        project.difficulty === 'beginner' ? 'bg-green-100 text-green-800' :
-                        project.difficulty === 'intermediate' ? 'bg-yellow-100 text-yellow-800' :
-                        'bg-red-100 text-red-800'
-                    }`}>
-                        {project.difficulty ? project.difficulty.charAt(0).toUpperCase() + project.difficulty.slice(1) : 'Unknown'}
-                    </span>
-                )}
-                {project.estimated_duration && (
-                    <span className="px-2 py-1 bg-gray-100 text-gray-700 text-xs rounded-full flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        {project.estimated_duration}
-                    </span>
-                )}
-            </div>
-
-            <div className="flex items-center justify-between text-sm text-gray-500 mb-4">
-                <div className="flex items-center gap-4">
+                <div className="flex items-center justify-between text-sm text-gray-500 pt-3 border-t border-gray-100">
                     <span className="flex items-center gap-1">
-                        <Calendar className="w-4 h-4" />
-                        {new Date(project.created_at).toLocaleDateString()}
+                        <MessageCircle size={16} />
+                        {project.comment_count || 0} comments
                     </span>
-                    <span className="flex items-center gap-1">
-                        <Users className="w-4 h-4" />
-                        {project.profiles?.username || 'Anonymous'}
-                    </span>
+                    <button 
+                        onClick={handleProjectClick}
+                        className="text-blue-600 hover:text-blue-800 font-medium"
+                    >
+                        View Details →
+                    </button>
                 </div>
             </div>
-
-            <div className="flex items-center justify-between pt-4 border-t border-gray-100">
-                <div className="flex items-center gap-4">
-                    <button
-                        onClick={() => handleVote(project.id, 1)}
-                        className={`flex items-center gap-1 px-3 py-1 rounded-full transition-colors ${
-                            project.userVote === 1
-                                ? 'bg-green-100 text-green-700'
-                                : 'hover:bg-gray-100 text-gray-600'
-                        }`}
-                        disabled={!user}
-                    >
-                        <ThumbsUp className="w-4 h-4" />
-                        <span>{project.upvotes || 0}</span>
-                    </button>
-                    
-                    <button
-                        onClick={() => handleVote(project.id, -1)}
-                        className={`flex items-center gap-1 px-3 py-1 rounded-full transition-colors ${
-                            project.userVote === -1
-                                ? 'bg-red-100 text-red-700'
-                                : 'hover:bg-gray-100 text-gray-600'
-                        }`}
-                        disabled={!user}
-                    >
-                        <ThumbsDown className="w-4 h-4" />
-                        <span>{project.downvotes || 0}</span>
-                    </button>
-
-                    <Link
-                        to={`/community/projects/${project.id}`}
-                        className="flex items-center gap-1 px-3 py-1 rounded-full hover:bg-gray-100 text-gray-600 transition-colors"
-                    >
-                        <MessageCircle className="w-4 h-4" />
-                        <span>{project.comment_count || 0}</span>
-                    </Link>
-                </div>
-
-                <Link
-                    to={`/community/projects/${project.id}`}
-                    className="flex items-center gap-1 text-blue-600 hover:text-blue-800 font-medium"
-                >
-                    View Details
-                    <ExternalLink className="w-4 h-4" />
-                </Link>
-            </div>
-        </div>
-    );
+        );
+    };
 
     if (loading && projects.length === 0) {
         return (
@@ -355,37 +426,28 @@ const CommunityPage = () => {
                     </div>
                 )}
 
-                {/* Projects Grid */}
+                {/* Projects List */}
                 {projects.length > 0 ? (
                     <>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
+                        <div className="space-y-6 mb-8">
                             {projects.map(project => (
                                 <ProjectCard key={project.id} project={project} />
                             ))}
                         </div>
 
-                        {/* Pagination */}
-                        {totalPages > 1 && (
-                            <div className="flex justify-center items-center gap-4">
-                                <button
-                                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-                                    disabled={currentPage === 1}
-                                    className="px-4 py-2 border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors"
-                                >
-                                    Previous
-                                </button>
-                                
-                                <span className="text-gray-600">
-                                    Page {currentPage} of {totalPages}
-                                </span>
-                                
-                                <button
-                                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-                                    disabled={currentPage === totalPages}
-                                    className="px-4 py-2 border border-gray-300 rounded-lg disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50 transition-colors"
-                                >
-                                    Next
-                                </button>
+                        {/* Load More Indicator */}
+                        {loadingMore && (
+                            <div className="flex justify-center items-center py-8">
+                                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+                                <span className="ml-3 text-gray-600">Loading more projects...</span>
+                            </div>
+                        )}
+
+                        {/* End of Results Indicator */}
+                        {!hasMorePages && !loadingMore && projects.length > 0 && (
+                            <div className="text-center py-8 text-gray-500">
+                                <p>You've reached the end! 🎉</p>
+                                <p className="text-sm mt-1">No more projects to show.</p>
                             </div>
                         )}
                     </>

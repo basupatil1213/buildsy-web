@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Send, Bot, User, Save, Lightbulb, RefreshCw } from 'lucide-react';
+import { Send, Bot, User, Save, Lightbulb, RefreshCw, Plus } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { chatAPI, projectsAPI } from '../services/api';
 
@@ -21,6 +21,9 @@ const GenerateIdeas = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [context, setContext] = useState('general');
   const [showSaveModal, setShowSaveModal] = useState(false);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+  const [showCreateButton, setShowCreateButton] = useState(false);
+  const [previewProject, setPreviewProject] = useState(null);
   const [lastAIResponse, setLastAIResponse] = useState('');
   const [savedProject, setSavedProject] = useState(null);
 
@@ -42,6 +45,29 @@ const GenerateIdeas = () => {
     };
 
     setMessages(prev => [...prev, userMessage]);
+    
+    // Check if user is responding positively to save suggestion
+    const isPositiveResponse = newMessage.toLowerCase().match(/^(yes|y|yeah|yep|sure|ok|okay|absolutely|definitely|save it|save|let's do it)$/i);
+    const lastMessage = messages[messages.length - 1];
+    const isAISaveSuggestion = lastMessage?.role === 'assistant' && 
+      (lastMessage.content.toLowerCase().includes('save this project') || 
+       lastMessage.content.toLowerCase().includes('would you like me to help you save') ||
+       lastMessage.content.toLowerCase().includes('would you like to save this'));
+
+    // If user says yes to save suggestion, show the preview modal with better extraction
+    if (isPositiveResponse && isAISaveSuggestion) {
+      setNewMessage('');
+      // Extract from the entire conversation for better project details
+      const allAIResponses = messages
+        .filter(msg => msg.role === 'assistant')
+        .map(msg => msg.content)
+        .join('\n\n');
+      const projectData = extractProjectDetails(allAIResponses);
+      setPreviewProject(projectData);
+      setShowPreviewModal(true);
+      return;
+    }
+
     setNewMessage('');
     setIsLoading(true);
 
@@ -62,10 +88,16 @@ const GenerateIdeas = () => {
         setMessages(prev => [...prev, aiMessage]);
         setLastAIResponse(response.data.response);
         
-        // Check if AI suggests saving the idea
-        if (response.data.response.toLowerCase().includes('save this project') || 
-            response.data.response.toLowerCase().includes('would you like me to help you save')) {
-          setTimeout(() => setShowSaveModal(true), 1000);
+        // Show create button after meaningful conversation (3+ exchanges with substantial AI responses)
+        const conversationLength = messages.length + 1; // +1 for the current message
+        const hasSubstantialContent = response.data.response.length > 200 && 
+          (response.data.response.toLowerCase().includes('project') || 
+           response.data.response.toLowerCase().includes('app') || 
+           response.data.response.toLowerCase().includes('build') ||
+           response.data.response.toLowerCase().includes('develop'));
+        
+        if (conversationLength >= 4 && hasSubstantialContent) {
+          setShowCreateButton(true);
         }
       }
     } catch (error) {
@@ -265,11 +297,13 @@ const GenerateIdeas = () => {
       // Validate project data before saving
       const validatedData = validateProjectData(projectData);
       
+      console.log('[GenerateIdeas] Sending project data:', validatedData);
+      
       const response = await projectsAPI.create(validatedData);
       
       if (response.success) {
         setSavedProject(response.data);
-        setShowSaveModal(false);
+        setShowPreviewModal(false);
         // Show success message
         const successMessage = {
           role: 'assistant',
@@ -280,8 +314,55 @@ const GenerateIdeas = () => {
       }
     } catch (error) {
       console.error('Error saving project:', error);
-      alert('Failed to save project. Please try again.');
+      console.error('Error response:', error.response?.data);
+      alert(`Failed to save project: ${error.response?.data?.message || error.message}`);
     }
+  };
+
+  // Handle Create Project button click
+  const handleCreateProject = () => {
+    // Combine all AI responses to get comprehensive project details
+    const allAIResponses = messages
+      .filter(msg => msg.role === 'assistant')
+      .map(msg => msg.content)
+      .join('\n\n');
+    
+    console.log('[GenerateIdeas] Extracting from full conversation:', allAIResponses);
+    const projectData = extractProjectDetails(allAIResponses);
+    setPreviewProject(projectData);
+    setShowPreviewModal(true);
+  };
+
+  // Handle preview project field changes
+  const handlePreviewChange = (field, value) => {
+    setPreviewProject(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  // Handle array field changes (tech_stack, features)
+  const handleArrayFieldChange = (field, index, value) => {
+    setPreviewProject(prev => ({
+      ...prev,
+      [field]: prev[field].map((item, i) => i === index ? value : item)
+    }));
+  };
+
+  // Add item to array fields
+  const addArrayItem = (field) => {
+    setPreviewProject(prev => ({
+      ...prev,
+      [field]: [...prev[field], '']
+    }));
+  };
+
+  // Remove item from array fields
+  const removeArrayItem = (field, index) => {
+    setPreviewProject(prev => ({
+      ...prev,
+      [field]: prev[field].filter((_, i) => i !== index)
+    }));
   };
 
   // Validate and clean project data before saving
@@ -352,11 +433,18 @@ const GenerateIdeas = () => {
     }
     
     if (!validated.category) {
-      validated.category = 'Software Development';
+      validated.category = 'Other';
     }
     
     if (!validated.difficulty) {
       validated.difficulty = 'intermediate';
+    } else {
+      // Ensure difficulty is lowercase for backend validation
+      validated.difficulty = validated.difficulty.toLowerCase();
+    }
+    
+    if (!validated.estimated_duration) {
+      validated.estimated_duration = 'To be determined';
     }
     
     return validated;
@@ -497,8 +585,208 @@ const GenerateIdeas = () => {
                 <Send className="w-5 h-5" />
               </button>
             </div>
+
+            {/* Create Project Button - Below Chat Input */}
+            {showCreateButton && (
+              <div className="mt-4 text-center">
+                <button
+                  onClick={handleCreateProject}
+                  className="inline-flex items-center px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors font-medium shadow-sm"
+                >
+                  <Plus className="w-5 h-5 mr-2" />
+                  Create Project
+                </button>
+                <p className="text-sm text-gray-500 mt-2">
+                  Ready to turn your idea into a project?
+                </p>
+              </div>
+            )}
           </div>
         </div>
+
+        {/* Project Preview Modal */}
+        {showPreviewModal && previewProject && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+              <div className="p-6">
+                <h3 className="text-xl font-semibold text-gray-900 mb-4">
+                  Preview Your Project
+                </h3>
+                <p className="text-gray-600 mb-6">
+                  Review and edit your project details before saving to your dashboard.
+                </p>
+
+                <div className="space-y-6">
+                  {/* Project Name */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Project Name *
+                    </label>
+                    <input
+                      type="text"
+                      value={previewProject.name || ''}
+                      onChange={(e) => handlePreviewChange('name', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      placeholder="Enter project name"
+                    />
+                  </div>
+
+                  {/* Description */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Description *
+                    </label>
+                    <textarea
+                      value={previewProject.description || ''}
+                      onChange={(e) => handlePreviewChange('description', e.target.value)}
+                      rows={4}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      placeholder="Describe your project"
+                    />
+                  </div>
+
+                  {/* Category & Difficulty */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Category
+                      </label>
+                      <select
+                        value={previewProject.category || ''}
+                        onChange={(e) => handlePreviewChange('category', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      >
+                        <option value="">Select Category</option>
+                        <option value="Web Development">Web Development</option>
+                        <option value="Mobile App">Mobile App</option>
+                        <option value="Data Science">Data Science</option>
+                        <option value="Machine Learning">Machine Learning</option>
+                        <option value="Game Development">Game Development</option>
+                        <option value="DevOps">DevOps</option>
+                        <option value="UI/UX Design">UI/UX Design</option>
+                        <option value="API Development">API Development</option>
+                        <option value="Blockchain">Blockchain</option>
+                        <option value="IoT">IoT</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-2">
+                        Difficulty
+                      </label>
+                      <select
+                        value={previewProject.difficulty || ''}
+                        onChange={(e) => handlePreviewChange('difficulty', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      >
+                        <option value="">Select Difficulty</option>
+                        <option value="Beginner">Beginner</option>
+                        <option value="Intermediate">Intermediate</option>
+                        <option value="Advanced">Advanced</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Estimated Duration */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Estimated Duration
+                    </label>
+                    <input
+                      type="text"
+                      value={previewProject.estimated_duration || ''}
+                      onChange={(e) => handlePreviewChange('estimated_duration', e.target.value)}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                      placeholder="e.g., 2-3 weeks, 1 month"
+                    />
+                  </div>
+
+                  {/* Tech Stack */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Technology Stack
+                    </label>
+                    <div className="space-y-2">
+                      {previewProject.tech_stack && previewProject.tech_stack.map((tech, index) => (
+                        <div key={index} className="flex gap-2">
+                          <input
+                            type="text"
+                            value={tech}
+                            onChange={(e) => handleArrayFieldChange('tech_stack', index, e.target.value)}
+                            className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                            placeholder="Technology name"
+                          />
+                          <button
+                            onClick={() => removeArrayItem('tech_stack', index)}
+                            className="px-3 py-2 text-red-600 hover:bg-red-50 rounded-md"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ))}
+                      <button
+                        onClick={() => addArrayItem('tech_stack')}
+                        className="px-3 py-2 text-indigo-600 hover:bg-indigo-50 rounded-md text-sm"
+                      >
+                        + Add Technology
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Features */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Key Features
+                    </label>
+                    <div className="space-y-2">
+                      {previewProject.features && previewProject.features.map((feature, index) => (
+                        <div key={index} className="flex gap-2">
+                          <input
+                            type="text"
+                            value={feature}
+                            onChange={(e) => handleArrayFieldChange('features', index, e.target.value)}
+                            className="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
+                            placeholder="Feature description"
+                          />
+                          <button
+                            onClick={() => removeArrayItem('features', index)}
+                            className="px-3 py-2 text-red-600 hover:bg-red-50 rounded-md"
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ))}
+                      <button
+                        onClick={() => addArrayItem('features')}
+                        className="px-3 py-2 text-indigo-600 hover:bg-indigo-50 rounded-md text-sm"
+                      >
+                        + Add Feature
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Modal Actions */}
+                <div className="flex justify-end space-x-3 mt-8 pt-6 border-t border-gray-200">
+                  <button
+                    onClick={() => setShowPreviewModal(false)}
+                    className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => saveProjectIdea(previewProject)}
+                    disabled={!previewProject.name || !previewProject.description}
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Save className="w-4 h-4 inline mr-2" />
+                    Save Project
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Save Modal */}
         {showSaveModal && (
